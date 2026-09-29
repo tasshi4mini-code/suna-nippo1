@@ -95,6 +95,9 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .dlg h3{margin:0 0 12px}
 .dlg .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px}
 .dlg .row .lbl{font-weight:bold;font-size:14px;align-self:center}
+.list-item.open{cursor:pointer}.list-item.open:hover{background:#f2f7ff}
+.badge{display:inline-block;font-size:12px;font-weight:bold;padding:2px 8px;border-radius:999px;margin-left:4px}
+.b-ok{background:var(--ok);color:var(--ok-ink)}.b-ng{background:var(--ng);color:var(--ng-ink)}.b-w{background:var(--warn);color:var(--warn-ink)}.b-g{background:var(--off);color:#5d6778}
 .list-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16325c;color:#fff;padding:12px 20px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none;z-index:99;max-width:90vw}
 #toast.show{opacity:1}
@@ -126,7 +129,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   <button class="sync" id="syncStat" hidden>同期</button>
   <span class="sp"></span>
   <button class="ghost" id="btnInstall" hidden>ホーム画面に追加</button>
-  <button class="ghost" id="btnList">保存済み日報</button>
+  <button class="ghost" id="btnList">日報一覧</button>
   <button class="ghost" id="btnSettings">設定</button>
   <button class="pri" id="btnCsv">Excel保存</button>
 </header>
@@ -268,15 +271,22 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 </div></dialog>
 
 <dialog id="dlgList"><div class="dlg">
-  <h3>保存済み日報 (このブラウザ内)</h3>
-  <div id="savedList"></div>
+  <h3 id="listTitle">日報一覧</h3>
+  <div id="listBar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+    <button id="mPrev" aria-label="前の月">◀</button>
+    <select id="mSel" style="width:auto;min-width:140px"></select>
+    <button id="mNext" aria-label="次の月">▶</button>
+    <button id="btnNewDay" style="margin-left:auto">＋ 今日の日報</button>
+  </div>
+  <div class="small" id="listSum" style="margin-bottom:6px"></div>
+  <div id="savedList" style="max-height:60vh;overflow-y:auto"></div>
   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
     <button class="pri" onclick="this.closest('dialog').close()">閉じる</button>
   </div>
 </div></dialog>
 
 <dialog id="dlgConfirm"><div class="dlg">
-  <p id="cfMsg" style="font-size:17px;margin:4px 0 18px"></p>
+  <p id="cfMsg" style="font-size:17px;margin:4px 0 18px;white-space:pre-line"></p>
   <div style="display:flex;justify-content:flex-end;gap:8px">
     <button id="cfNo">キャンセル</button><button class="pri" id="cfYes">OK</button>
   </div>
@@ -499,17 +509,60 @@ $("btnSettings").onclick=()=>{ renderSpecEdit(); updateDirInfo(); $("dlgSettings
 $("btnSettingsClose").onclick=()=>$("dlgSettings").close();
 $("btnSpecReset").onclick=()=>{ spec=JSON.parse(JSON.stringify(DEFAULT_SPEC)); LS.set("suna:spec",spec); renderSpecEdit(); renderSpec(); refreshLight(); };
 
-// ---- saved list ----
-$("btnList").onclick=()=>{
-  const ks=LS.keys().filter(k=>k.startsWith("suna:day:")).sort().reverse();
-  $("savedList").innerHTML = ks.length ? ks.map(k=>{ const [d,q]=k.slice(9).split("|"); const s=LS.get(k,{}); const n=(s.rows||[]).filter(r=>hasData(Object.assign(blankRow(),r))).length;
-    return `<div class="list-item"><div><b>${esc(d)}</b> ${esc(q)} <span class="small">(${n}件入力)</span></div><div style="display:flex;gap:6px"><button data-open="${esc(k)}">開く</button><button data-rm="${esc(k)}">削除</button></div></div>`;}).join("") : '<div class="small">保存済みの日報はありません</div>';
-  $("dlgList").showModal();
-};
-$("savedList").addEventListener("click",async e=>{
-  const o=e.target.dataset.open, rm=e.target.dataset.rm;
-  if(o){ const [d,q]=o.slice(9).split("|"); load(d,q); sel=0; renderAll(); $("dlgList").close(); }
-  if(rm){ $("dlgList").close(); if(await askConfirm("この日報の下書きを削除しますか? (保存済みのExcelファイルは消えません)")){ LS.del(rm); toast("削除しました"); } $("btnList").click(); }
+// ---- 日報一覧 ----
+const WD="日月火水木金土";
+function ymOf(d){ return d.slice(0,7); }
+function ymShift(ym,n){ const [y,m]=ym.split("-").map(Number); const d=new Date(y,m-1+n,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function fmtDay(d){ const x=new Date(d+"T00:00:00"); return `${x.getMonth()+1}/${x.getDate()}(${WD[x.getDay()]})`; }
+function fmtTime(u){ if(!u) return ""; const x=new Date(u); return `${x.getMonth()+1}/${x.getDate()} ${x.getHours()}:${String(x.getMinutes()).padStart(2,"0")}`; }
+let listYM=null;
+function localDays(){
+  return LS.keys().filter(k=>k.startsWith("suna:day:")).map(k=>{ const [date,equip]=k.slice(9).split("|"); const st=LS.get(k,{}); const rows=(st.rows||[]).map(r=>Object.assign(blankRow(),r));
+    return {date,equip,filled:rows.filter(r=>!r.off&&hasData(r)).length,stopped:rows.filter(r=>r.off).length,ng:rows.filter(r=>!r.off&&judgeOf(r)==="NG").length,warn:0,events:(st.events||[]).filter(e=>!e.del).length,u:Date.parse(st.updated||"")||0,local:true}; });
+}
+function dayItem(it){
+  const today=it.date===todayStr(), cur=it.date===state.date&&it.equip===state.equip;
+  const badges=[
+    `<span class="badge ${it.filled>=24-it.stopped&&it.filled>0?"b-ok":"b-g"}">${it.filled}/${24-it.stopped}時刻</span>`,
+    it.ng?`<span class="badge b-ng">NG ${it.ng}</span>`:"",
+    it.warn?`<span class="badge b-w">狙い外 ${it.warn}</span>`:"",
+    it.events?`<span class="badge b-g">異常/変化点 ${it.events}</span>`:""].join("");
+  return `<div class="list-item open" data-d="${esc(it.date)}" data-q="${esc(it.equip)}" style="${cur?"background:#e3eeff;":""}">
+    <div><b style="font-size:17px">${fmtDay(it.date)}</b> <span class="small">${esc(it.equip)}</span>${today?' <span class="badge b-w">今日</span>':""}<br>${badges}</div>
+    <div class="small" style="text-align:right">${it.u?"更新 "+fmtTime(it.u):""}<br><span style="color:var(--pri);font-weight:bold">開く ›</span></div></div>`;
+}
+async function renderList(){
+  const box=$("savedList"), on=!!Sync.getCfg().syncUrl;
+  $("listTitle").textContent = on ? "日報一覧 (全端末の共有データ)" : "日報一覧 (この端末)";
+  const ym=listYM;
+  const months=new Set([ym]); for(let i=-12;i<=1;i++) months.add(ymShift(ymOf(todayStr()),i));
+  let items=[], note="";
+  if(on && navigator.onLine!==false){
+    box.innerHTML='<div class="small" style="padding:12px">読み込み中…</div>';
+    try{ const j=await Sync.list(ym); if(listYM!==ym) return; items=j.days||[]; (j.months||[]).forEach(m=>months.add(m)); }
+    catch(e){ note="共有データを読み込めませんでした (電波・接続を確認)。この端末のデータを表示しています。"; items=localDays().filter(x=>ymOf(x.date)===ym); }
+  } else {
+    if(on) note="オフラインのため、この端末のデータを表示しています。";
+    items=localDays().filter(x=>ymOf(x.date)===ym);
+  }
+  $("mSel").innerHTML=[...months].sort().reverse().map(m=>`<option value="${m}" ${m===ym?"selected":""}>${m.replace("-","年")}月</option>`).join("");
+  items.sort((a,b)=> a.date===b.date ? a.equip.localeCompare(b.equip) : (a.date<b.date?1:-1));
+  const ng=items.reduce((a,b)=>a+(b.ng||0),0);
+  $("listSum").textContent = (note?note+" / ":"") + `${items.length}日分` + (ng?` ・ NG 合計 ${ng}件`:"");
+  box.innerHTML = items.length ? items.map(dayItem).join("") : '<div class="small" style="padding:12px">この月の日報はありません</div>';
+}
+function openList(){ listYM=ymOf(state.date||todayStr()); $("dlgList").showModal(); renderList(); }
+$("btnList").onclick=openList;
+$("mPrev").onclick=()=>{ listYM=ymShift(listYM,-1); renderList(); };
+$("mNext").onclick=()=>{ listYM=ymShift(listYM,1); renderList(); };
+$("mSel").onchange=e=>{ listYM=e.target.value; renderList(); };
+$("btnNewDay").onclick=()=>{ $("dlgList").close(); load(todayStr(),state.equip||defEquip); sel=nowSlot(); renderAll(); Sync.pull(); };
+$("savedList").addEventListener("click",e=>{
+  const it=e.target.closest(".list-item.open"); if(!it) return;
+  const d=it.dataset.d, q=it.dataset.q;
+  $("dlgList").close(); load(d,q); sel = d===todayStr()? nowSlot() : 0; renderAll(); Sync.pull();
+  toast(fmtDay(d)+" "+q+" の日報を開きました");
+  window.scrollTo({top:0,behavior:"smooth"});
 });
 
 // ---- folder handle (File System Access API) ----
@@ -703,7 +756,22 @@ $("btnCsv").onclick=async()=>{
   const unWorker = state.rows.findIndex(r=>!r.off && hasData(r) && !r.worker);
   if(unWorker>=0 && !(await askConfirm(SLOTS[unWorker]+" の作業者が未記入です。このまま保存しますか?"))) return;
   const base="砂処理日報_"+state.equip.replace(/[\\/:*?"<>|]/g,"_")+"_"+state.date.replace(/-/g,"");
-  const where=await writeFile(base+".xlsx",buildXlsx());
+  const blob=buildXlsx();
+  if(Sync.getCfg().syncUrl){
+    const btn=$("btnCsv"); btn.disabled=true; const lbl=btn.textContent; btn.textContent="保存中…";
+    try{
+      await Sync.flush();
+      const r=await Sync.saveFile(base+".xlsx",blob);
+      if(!r.path && !r.url) throw new Error("Apps Script が古い版のままです。「デプロイを管理」→「新バージョン」でデプロイし直してください");
+      state.exported=new Date().toISOString(); save();
+      toast("Googleドライブに保存しました: "+(r.path||base+".xlsx"));
+      return;
+    }catch(e){
+      console.warn(e);
+      if(!(await askConfirm("Googleドライブに保存できませんでした ("+(navigator.onLine===false?"電波がありません":(e.message||"接続エラー"))+")。\nこの端末に保存しますか? (電波のある場所で、もう一度ドライブに保存することもできます)"))) return;
+    }finally{ btn.disabled=false; btn.textContent=lbl; }
+  }
+  const where=await writeFile(base+".xlsx",blob);
   if(where){ state.exported=new Date().toISOString(); save(); }
   if(where) toast("保存しました: "+where);
 };
@@ -790,7 +858,12 @@ const Sync=(function(){
   window.addEventListener("offline",status);
   document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ flush().then(pull); } });
   setInterval(()=>{ if(document.visibilityState==="visible"){ flush().then(pull); } },45000);
-  return {queue,flush,pull,status,test,setCfg,getCfg,pendingCount:()=>q.length};
+  async function saveFile(name,blob){
+    const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]); fr.onerror=()=>rej(fr.error); fr.readAsDataURL(blob); });
+    return call(null,{token:cfg.token,action:"saveFile",filename:name,date:state.date,data:b64});
+  }
+  async function list(month){ return call({action:"list",token:cfg.token,month}); }
+  return {queue,flush,pull,status,test,setCfg,getCfg,saveFile,list,pendingCount:()=>q.length};
 })();
 $("syncStat").onclick=async()=>{ await Sync.flush(); await Sync.pull(); toast(Sync.pendingCount()?"未送信のデータがあります。電波の良い場所で再度お試しください":"最新の状態です"); };
 $("btnCfgSave").onclick=()=>{ Sync.setCfg($("cfgUrl").value.trim(),$("cfgToken").value.trim()); $("cfgInfo").textContent="保存しました"; Sync.pull(); };

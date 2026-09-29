@@ -1,6 +1,6 @@
 // 砂処理日報 Service Worker
 // アプリを更新したら VERSION を変えてください(自動で新しい版に切り替わります)
-const VERSION = "suna-nippo-v2";
+const VERSION = "suna-nippo-v5";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./config.js", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
