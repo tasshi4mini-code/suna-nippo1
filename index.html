@@ -248,8 +248,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   <div class="small" style="margin-bottom:8px">規格 (範囲外 = 赤・NG) と狙い (範囲外 = 黄) を設定します。</div>
   <div id="specEdit"></div>
   <hr>
-  <label class="f" style="margin:8px 0">Excel保存のとき、この端末の「ダウンロード」にも保存する
-    <select id="localCopy"><option value="auto">自動 (パソコンは保存する / スマホは保存しない)</option><option value="on">保存する</option><option value="off">保存しない (ドライブのみ)</option></select></label>
+  <label class="f" style="margin:8px 0">「Excel保存」の保存先
+    <select id="xlsxDest"><option value="local">この端末のみ (パソコンは「ダウンロード」)</option><option value="drive">Googleドライブのみ</option><option value="both">両方</option></select></label>
   <div id="dirSec"><div class="t" style="font-weight:bold;margin:8px 0">Excelファイルの保存先フォルダ</div>
   <div class="small" id="dirInfo">未設定 (ブラウザの「ダウンロード」フォルダに保存されます)</div>
   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -511,12 +511,10 @@ $("btnSettings").onclick=()=>{ renderSpecEdit(); updateDirInfo(); $("dlgSettings
 $("btnSettingsClose").onclick=()=>$("dlgSettings").close();
 $("btnSpecReset").onclick=()=>{ spec=JSON.parse(JSON.stringify(DEFAULT_SPEC)); LS.set("suna:spec",spec); renderSpecEdit(); renderSpec(); refreshLight(); };
 
-// ---- 端末にも保存 ----
-function isPC(){ const ua=navigator.userAgent||""; if(/iPhone|iPad|iPod|Android|Mobile/i.test(ua)) return false; if(/Macintosh/.test(ua) && navigator.maxTouchPoints>1) return false; return true; }
-function localCopyMode(){ return LS.get("suna:localCopy","auto"); }
-function localCopyOn(){ const m=localCopyMode(); return m==="on" || (m==="auto" && isPC()); }
-$("localCopy").onchange=e=>{ LS.set("suna:localCopy",e.target.value); toast("設定しました"); };
-$("btnSettings").addEventListener("click",()=>{ $("localCopy").value=localCopyMode(); });
+// ---- Excelの保存先 ----
+function xlsxDest(){ const v=LS.get("suna:xlsxDest","local"); return ["local","drive","both"].includes(v)?v:"local"; }
+$("xlsxDest").onchange=e=>{ LS.set("suna:xlsxDest",e.target.value); toast("設定しました"); };
+$("btnSettings").addEventListener("click",()=>{ $("xlsxDest").value=xlsxDest(); });
 
 // ---- 日報一覧 ----
 const WD="日月火水木金土";
@@ -766,7 +764,8 @@ $("btnCsv").onclick=async()=>{
   if(unWorker>=0 && !(await askConfirm(SLOTS[unWorker]+" の作業者が未記入です。このまま保存しますか?"))) return;
   const base="砂処理日報_"+state.equip.replace(/[\\/:*?"<>|]/g,"_")+"_"+state.date.replace(/-/g,"");
   const blob=buildXlsx();
-  if(Sync.getCfg().syncUrl){
+  const dest=xlsxDest();
+  if(Sync.getCfg().syncUrl && dest!=="local"){
     const btn=$("btnCsv"); btn.disabled=true; const lbl=btn.textContent; btn.textContent="保存中…";
     try{
       await Sync.flush();
@@ -774,7 +773,7 @@ $("btnCsv").onclick=async()=>{
       if(!r.path && !r.url) throw new Error("Apps Script が古い版のままです。「デプロイを管理」→「新バージョン」でデプロイし直してください");
       state.exported=new Date().toISOString(); save();
       let msg="Googleドライブに保存しました: "+(r.path||base+".xlsx");
-      if(localCopyOn()){ const w=await writeFile(base+".xlsx",blob); if(w) msg+=" / この端末: "+w; }
+      if(dest==="both"){ const w=await writeFile(base+".xlsx",blob); if(w) msg+=" / この端末: "+w; }
       toast(msg);
       return;
     }catch(e){
