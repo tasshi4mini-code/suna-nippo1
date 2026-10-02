@@ -392,6 +392,9 @@ function rowStatus(r){
 function fmtCond(k,v){ if(v==null||v==="") return ""; const n=Number(v); if(!isFinite(n)||String(v).trim()==="") return String(v); return k==="kaishu"?String(n):(k==="greenbond"?n.toFixed(2):n.toFixed(3)); }
 function startCond(k){ const c=state.cond0||{}; return (c[k]!=null&&c[k]!=="")?String(c[k]):COND_DEF[k]; }
 function lastCond(i,k){ for(let j=i-1;j>=0;j--){ const v=state.rows[j][k]; if(v!=="") return v; } return startCond(k); }
+function measured(r){ return MEAS.some(k=>r[k]!==""); }
+// 表・Excel・シートに出す製造条件: 測定済みの時刻だけ表示(未測定の時刻は、その時刻で変更した値だけ)
+function condDisp(i,k){ const r=state.rows[i]; if(r.off) return ""; return measured(r)? effCond(i,k) : r[k]; }
 function effCond(i,k){ const r=state.rows[i]; return r[k]!==""?r[k]:lastCond(i,k); }
 // 前日以前(この端末)の最後の製造条件
 function localPrevCond(date,equip){
@@ -465,7 +468,7 @@ function renderTable(){
     const c = k=>`<td class="${cls(k,r[k])}">${esc(r[k])}</td>`;
     const j=judgeOf(r);
     return `<tr class="${i===sel?"sel":""}" data-i="${i}"><td><b>${SLOTS[i]}</b></td>`+
-      COND.map(k=>`<td class="${r[k]!==""?"chg":"inh"}">${esc(effCond(i,k))}</td>`).join("")+
+      COND.map(k=>`<td class="${r[k]!==""?"chg":"inh"}">${esc(condDisp(i,k))}</td>`).join("")+
       `<td>${tc}</td>${c("moist")}${c("cb")}${c("h1n")}${c("h1s")}${c("h2n")}${c("h2s")}<td>${r.squeeze?"低":""}</td>`+
       `<td class="${j==="NG"?"jNG":""}">${j}</td><td>${esc(r.worker)}</td></tr>`;
   }).join("");
@@ -624,7 +627,7 @@ function buildMain(){
     const ngs=CHECKED.filter(k=>cls(k,r[k])==="ng").map(k=>LABEL[k]).join("・");
     const ws=CHECKED.filter(k=>cls(k,r[k])==="warn").map(k=>LABEL[k]).join("・");
     out.push([state.date,state.equip,SLOTS[i],r.off?"停止":"稼働",
-      r.off?"":(r.kaishu||lastCond(i,"kaishu")), r.off?"":(r.shinsa||lastCond(i,"shinsa")), r.off?"":(r.seacoal||lastCond(i,"seacoal")), r.off?"":(r.greenbond||lastCond(i,"greenbond")), r.off?"":(r.bentonite||lastCond(i,"bentonite")),
+      condDisp(i,"kaishu"), condDisp(i,"shinsa"), condDisp(i,"seacoal"), condDisp(i,"greenbond"), condDisp(i,"bentonite"),
       r.temp,r.humid,r.moist,r.cb,r.h1n,r.h1s,r.h2n,r.h2s,r.squeeze?"低":"",
       r.off?"":judgeOf(r), r.off?"":(r.judgeManual?"手動":"自動"), r.worker,
       state.batch,state.sandRemain,state.confirmBy, r.off?"":ngs, r.off?"":ws]);
@@ -735,7 +738,7 @@ function buildNippoSheet(){
   state.rows.forEach((r,i)=>{ const y=r0+3+i;
     S.set(0,y,SLOTS[i],st({font:1,border:1,h:"center"}));
     if(r.off){ for(let c=1;c<17;c++) S.set(c,y,c===6?"/":"",st({border:1,h:"center",fill:"off"})); return; }
-    COND.forEach((k,j)=>S.set(1+j,y,effCond(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?2:0,fill:"none"})));
+    COND.forEach((k,j)=>S.set(1+j,y,condDisp(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?2:0,fill:"none"})));
     ["temp","humid","moist","cb","h1n","h1s","h2n","h2s"].forEach((k,j)=>{
       const c=CHECKED.includes(k)?cls(k,r[k]):"";
       S.set(6+j,y,r[k],st({border:1,h:"center",fmt:fmtOf[k],fill:c==="ng"?"ng":c==="warn"?"warn":"none",font:c==="ng"?2:0})); });
@@ -824,7 +827,7 @@ function rowCols(i){
   const r=state.rows[i];
   const ngs=CHECKED.filter(k=>cls(k,r[k])==="ng").map(k=>LABEL[k]).join("・");
   const ws=CHECKED.filter(k=>cls(k,r[k])==="warn").map(k=>LABEL[k]).join("・");
-  const cv=k=>r.off?"":(r[k]||lastCond(i,k));
+  const cv=k=>condDisp(i,k);
   return [state.date,state.equip,SLOTS[i],r.off?"停止":"稼働",cv("kaishu"),cv("shinsa"),cv("seacoal"),cv("greenbond"),cv("bentonite"),
     r.temp,r.humid,r.moist,r.cb,r.h1n,r.h1s,r.h2n,r.h2s,r.squeeze?"低":"",r.off?"":judgeOf(r),r.off?"":(r.judgeManual?"手動":"自動"),r.worker,r.off?"":ngs,r.off?"":ws].map(asVal);
 }
