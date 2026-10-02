@@ -65,6 +65,13 @@ input:focus,textarea:focus{outline:3px solid #9cc0f5;border-color:var(--pri)}
 .g-cond{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 .g-meas{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .g-hard{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+label.sup{color:#c62828;font-weight:bold}
+label.sup input{border:2px solid #e53935;background:#fff1f1;color:#b00020;font-weight:bold}
+label.sup input::placeholder{color:#e57373;font-weight:normal}
+input.cond-inh{color:#1d2330;background:#f3f5f8}
+input.cond-chg{background:#e3eeff;border:2px solid var(--pri);font-weight:bold}
+td.chg{background:#e3eeff;font-weight:bold}
+td.inh{color:#5d6778}
 input.ok{background:var(--ok)} input.warn{background:var(--warn)} input.ng{background:var(--ng);color:var(--ng-ink);font-weight:bold}
 .hint{font-size:12px;color:var(--sub);min-height:16px}
 .hint.ng{color:var(--ng-ink);font-weight:bold}.hint.warn{color:var(--warn-ink)}
@@ -140,7 +147,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <div class="grid g-head">
       <label class="f">バッチ数 (/日)<input id="batch" inputmode="numeric"></label>
       <label class="f">回収サンドビン砂残量<input id="sandRemain" placeholder="例: 1.8/3"></label>
-      <label class="f">記録確認<input id="confirmBy" placeholder="確認者名"></label>
+      <label class="f sup">記録確認（監督者記入）<input id="confirmBy" placeholder="監督者記入"></label>
     </div>
     <div class="spec" id="specLine"></div>
   </section>
@@ -161,13 +168,13 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 
     <div id="entryBody">
       <div class="sec">
-        <div class="t">製造条件 (変更時のみ記入 / 空欄は前回値を表示)</div>
+        <div class="t">製造条件 (いまの条件を表示しています / 変わったときだけ数字を書き換えてください。翌日以降も引き継がれます)</div>
         <div class="grid g-cond">
-          <label class="f">回収砂 (kg)<input data-k="kaishu" inputmode="decimal"></label>
-          <label class="f">新砂 (sec)<input data-k="shinsa" inputmode="decimal"></label>
-          <label class="f">シーコール (sec)<input data-k="seacoal" inputmode="decimal"></label>
-          <label class="f">グリーンボンド (sec)<input data-k="greenbond" inputmode="decimal"></label>
-          <label class="f">ベントナイト (sec)<input data-k="bentonite" inputmode="decimal"></label>
+          <label class="f">回収砂 (kg)<input data-k="kaishu" inputmode="decimal"><span class="hint" data-ch="kaishu"></span></label>
+          <label class="f">新砂 (%)<input data-k="shinsa" inputmode="decimal"><span class="hint" data-ch="shinsa"></span></label>
+          <label class="f">シーコール (%)<input data-k="seacoal" inputmode="decimal"><span class="hint" data-ch="seacoal"></span></label>
+          <label class="f">ミックスボンド (%)<input data-k="greenbond" inputmode="decimal"><span class="hint" data-ch="greenbond"></span></label>
+          <label class="f">ベントナイト (%)<input data-k="bentonite" inputmode="decimal"><span class="hint" data-ch="bentonite"></span></label>
         </div>
       </div>
 
@@ -222,7 +229,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
             <th rowspan="3">調査<br>時刻</th><th colspan="5">製造条件</th><th rowspan="2" colspan="1">環境条件</th><th colspan="7">造型機</th><th rowspan="3">判定</th><th rowspan="3">作業者</th>
           </tr>
           <tr>
-            <th rowspan="2">回収砂</th><th rowspan="2">新砂</th><th rowspan="2">シーコール</th><th rowspan="2">グリーン<br>ボンド</th><th rowspan="2">ベントナイト</th>
+            <th rowspan="2">回収砂<br>(kg)</th><th rowspan="2">新砂<br>(%)</th><th rowspan="2">シーコール<br>(%)</th><th rowspan="2">ミックス<br>ボンド(%)</th><th rowspan="2">ベント<br>ナイト(%)</th>
             <th rowspan="2">水分</th><th rowspan="2">CB</th><th colspan="4">鋳型硬度</th><th rowspan="2">2号<br>スクイズ<br>圧低</th>
           </tr>
           <tr><th>外気温/湿度</th><th>1号-北側</th><th>1号-南側</th><th>2号-北側</th><th>2号-南側</th></tr>
@@ -317,7 +324,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 const SLOTS = [];
 for(let i=0;i<24;i++){ SLOTS.push(((7+i)%24)+":00"); }
 const COND = ["kaishu","shinsa","seacoal","greenbond","bentonite"];
-const COND_DEF = {kaishu:"2000",shinsa:"20",seacoal:"10",greenbond:"10",bentonite:"30"};
+const COND_DEF = {kaishu:"1800",shinsa:"0.100",seacoal:"0.076",greenbond:"0.00",bentonite:"0.860"};
+const COND_LABEL = {kaishu:"回収砂",shinsa:"新砂",seacoal:"シーコール",greenbond:"ミックスボンド",bentonite:"ベントナイト"};
 const MEAS = ["temp","humid","moist","cb","h1n","h1s","h2n","h2s"];
 const CHECKED = ["moist","cb","h1n","h1s","h2n","h2s"];
 const HARD = ["h1n","h1s","h2n","h2s"];
@@ -353,6 +361,7 @@ function load(date,equip){
   state.rows = state.rows.map(r=>Object.assign(blankRow(),r));
   if(!state.events) state.events=[];
   state.events.forEach(e=>{ if(!e.id) e.id=uid(); if(!e.u) e.u=1; });
+  if(!state.cond0){ state.cond0=localPrevCond(date,equip)||Object.assign({},COND_DEF); }
   if(!state.hu) state.hu=0;
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
@@ -380,7 +389,18 @@ function rowStatus(r){
   if(CHECKED.some(k=>cls(k,r[k])==="warn")) return "warn";
   return "filled";
 }
-function lastCond(i,k){ for(let j=i-1;j>=0;j--){ const v=state.rows[j][k]; if(v!=="") return v; } return COND_DEF[k]; }
+function fmtCond(k,v){ if(v==null||v==="") return ""; const n=Number(v); if(!isFinite(n)||String(v).trim()==="") return String(v); return k==="kaishu"?String(n):(k==="greenbond"?n.toFixed(2):n.toFixed(3)); }
+function startCond(k){ const c=state.cond0||{}; return (c[k]!=null&&c[k]!=="")?String(c[k]):COND_DEF[k]; }
+function lastCond(i,k){ for(let j=i-1;j>=0;j--){ const v=state.rows[j][k]; if(v!=="") return v; } return startCond(k); }
+function effCond(i,k){ const r=state.rows[i]; return r[k]!==""?r[k]:lastCond(i,k); }
+// 前日以前(この端末)の最後の製造条件
+function localPrevCond(date,equip){
+  const ks=LS.keys().filter(k=>k.startsWith("suna:day:")&&k.endsWith("|"+equip)).map(k=>k.slice(9).split("|")[0]).filter(d=>d<date).sort();
+  for(let n=ks.length-1;n>=0;n--){ const st=LS.get("suna:day:"+ks[n]+"|"+equip,null); if(!st||!st.rows) continue;
+    const out={}; COND.forEach(k=>{ let v=""; for(let j=st.rows.length-1;j>=0;j--){ if(st.rows[j]&&st.rows[j][k]){ v=st.rows[j][k]; break; } } out[k]=v||(st.cond0&&st.cond0[k])||""; });
+    if(COND.some(k=>out[k])) return out; }
+  return null;
+}
 function nowSlot(){ const h=new Date().getHours(); return (h-7+24)%24; }
 function fmtSpec(s,d){ return d? s.min.toFixed(d)+"〜"+s.max.toFixed(d) : s.min+"〜"+s.max; }
 
@@ -410,10 +430,17 @@ function renderEntry(){
   document.querySelectorAll("#entryCard input[data-k]").forEach(inp=>{
     const k=inp.dataset.k;
     inp.value=r[k];
-    if(COND.includes(k)) inp.placeholder="前回 "+lastCond(sel,k);
+    if(COND.includes(k)) condView(inp);
     if(k==="worker" && !r.worker){ const p = sel>0 ? state.rows[sel-1].worker : ""; inp.placeholder = p ? "前回 "+p : "氏名"; }
   });
   updateMarks();
+}
+function condView(inp){
+  const k=inp.dataset.k, r=state.rows[sel], chg=r[k]!=="";
+  if(document.activeElement!==inp) inp.value = chg ? r[k] : lastCond(sel,k);
+  inp.className = chg ? "cond-chg" : "cond-inh";
+  const h=document.querySelector(`[data-ch="${k}"]`);
+  if(h){ h.className="hint"; h.textContent = chg ? `この時刻で変更 (前: ${lastCond(sel,k)})` : "前回から継続"; }
 }
 function updateMarks(){
   const r=state.rows[sel];
@@ -438,7 +465,7 @@ function renderTable(){
     const c = k=>`<td class="${cls(k,r[k])}">${esc(r[k])}</td>`;
     const j=judgeOf(r);
     return `<tr class="${i===sel?"sel":""}" data-i="${i}"><td><b>${SLOTS[i]}</b></td>`+
-      COND.map(k=>`<td>${esc(r[k])}</td>`).join("")+
+      COND.map(k=>`<td class="${r[k]!==""?"chg":"inh"}">${esc(effCond(i,k))}</td>`).join("")+
       `<td>${tc}</td>${c("moist")}${c("cb")}${c("h1n")}${c("h1s")}${c("h2n")}${c("h2s")}<td>${r.squeeze?"低":""}</td>`+
       `<td class="${j==="NG"?"jNG":""}">${j}</td><td>${esc(r.worker)}</td></tr>`;
   }).join("");
@@ -468,7 +495,13 @@ function selectSlot(i){ sel=(i+24)%24; renderChips(); renderEntry(); renderTable
 $("chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(b) selectSlot(+b.dataset.i); });
 $("tbody").addEventListener("click",e=>{ const tr=e.target.closest("tr"); if(tr){ selectSlot(+tr.dataset.i); $("entryCard").scrollIntoView({behavior:"smooth",block:"start"}); } });
 document.querySelectorAll("#entryCard input[data-k]").forEach(inp=>{
-  inp.addEventListener("input",()=>{ state.rows[sel][inp.dataset.k]=inp.value.trim(); touchRow(sel, COND.includes(inp.dataset.k)); refreshLight(); });
+  inp.addEventListener("input",()=>{ const k=inp.dataset.k; let v=inp.value.trim();
+    if(COND.includes(k)){ if(v===lastCond(sel,k) || (num(v)!=null && num(v)===num(lastCond(sel,k)))) v=""; state.rows[sel][k]=v; touchRow(sel,true); condView(inp); refreshLight(); return; }
+    state.rows[sel][k]=v; touchRow(sel, false); refreshLight(); });
+  if(COND.includes(inp.dataset.k)){
+    inp.addEventListener("focus",()=>{ try{ inp.select(); }catch(e){} });
+    inp.addEventListener("blur",()=>condView(inp));
+  }
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); const all=[...document.querySelectorAll("#entryCard input[data-k]")]; const n=all[all.indexOf(inp)+1]; if(n) n.focus(); } });
 });
 $("f_off").addEventListener("change",e=>{ state.rows[sel].off=e.target.checked; touchRow(sel); renderEntry(); refreshLight(); });
@@ -584,7 +617,7 @@ $("btnClearDir").onclick=async()=>{ dirHandle=null; await idbSet("dir",null); up
 
 // ---- Excel (.xlsx) 出力 ----
 function buildMain(){
-  const head=["生産日","生産設備","調査時刻","稼働","回収砂(kg)","新砂(sec)","シーコール(sec)","グリーンボンド(sec)","ベントナイト(sec)","外気温(℃)","湿度(%)","水分(%)","CB(%)","1号北側(kg/cm2)","1号南側(kg/cm2)","2号北側(kg/cm2)","2号南側(kg/cm2)","2号スクイズ圧低","判定","判定方法","作業者","バッチ数","回収サンドビン砂残量","記録確認","規格外項目","狙い外項目"];
+  const head=["生産日","生産設備","調査時刻","稼働","回収砂(kg)","新砂(%)","シーコール(%)","ミックスボンド(%)","ベントナイト(%)","外気温(℃)","湿度(%)","水分(%)","CB(%)","1号北側(kg/cm2)","1号南側(kg/cm2)","2号北側(kg/cm2)","2号南側(kg/cm2)","2号スクイズ圧低","判定","判定方法","作業者","バッチ数","回収サンドビン砂残量","記録確認(監督者)","規格外項目","狙い外項目"];
   const out=[head];
   state.rows.forEach((r,i)=>{
     if(!r.off && !hasData(r)) return;
@@ -612,7 +645,7 @@ function asVal(v){ if(v===""||v==null) return null; if(typeof v==="number") retu
 const XS={fonts:['<font><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><color rgb="FFB00020"/><name val="Meiryo UI"/></font>','<font><b/><sz val="16"/><name val="Meiryo UI"/></font>','<font><sz val="9"/><color rgb="FF5D6778"/><name val="Meiryo UI"/></font>'],
   fills:{none:0,gray:1,head:2,warn:3,ng:4,off:5,sel:6},
   fillXml:['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFEEF1F6"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFDCDC"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE8EAEE"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE3EEFF"/></patternFill></fill>'],
-  fmts:{gen:0,d2:164,d1:165}, xfs:[], map:{}};
+  fmts:{gen:0,d2:164,d1:165,d3:166}, xfs:[], map:{}};
 function st(o){ o=Object.assign({font:0,fill:"none",border:0,fmt:"gen",h:"",wrap:false},o||{});
   const k=JSON.stringify(o); if(XS.map[k]!=null) return XS.map[k];
   const al = (o.h||o.wrap) ? `<alignment${o.h?` horizontal="${o.h}"`:""} vertical="center"${o.wrap?' wrapText="1"':""}/>` : '<alignment vertical="center"/>';
@@ -620,7 +653,7 @@ function st(o){ o=Object.assign({font:0,fill:"none",border:0,fmt:"gen",h:"",wrap
   return XS.map[k]=XS.xfs.length-1; }
 st({}); // index 0
 function stylesXml(){ return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
- '<numFmts count="2"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.0"/></numFmts>'+
+ '<numFmts count="3"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="0.000"/></numFmts>'+
  `<fonts count="${XS.fonts.length}">${XS.fonts.join("")}</fonts><fills count="${XS.fillXml.length}">${XS.fillXml.join("")}</fills>`+
  '<borders count="2"><border/><border><left style="thin"><color rgb="FF808A99"/></left><right style="thin"><color rgb="FF808A99"/></right><top style="thin"><color rgb="FF808A99"/></top><bottom style="thin"><color rgb="FF808A99"/></bottom></border></borders>'+
  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
@@ -684,12 +717,12 @@ function buildNippoSheet(){
   S.merge(5,1,6,1,"生産設備",H); S.merge(7,1,8,1,state.equip,B);
   S.merge(9,1,10,1,"バッチ数",H); S.merge(11,1,11,1,state.batch,B);
   S.merge(12,1,13,1,"砂残量",H); S.merge(14,1,14,1,state.sandRemain,B);
-  S.merge(15,1,15,1,"記録確認",H); S.merge(16,1,16,1,state.confirmBy,B);
+  S.merge(15,1,15,1,"記録確認\n(監督者)",st({font:2,fill:"ng",border:1,h:"center",wrap:true})); S.merge(16,1,16,1,state.confirmBy,st({font:2,border:1,h:"center"})); S.heights[1]=30;
   S.set(0,2,`水分規格: ${fmtSpec(spec.moist,1)}% (狙い ${spec.moist.tmin}〜${spec.moist.tmax})　CB値規格: ${fmtSpec(spec.cb)}% (狙い ${spec.cb.tmin}〜${spec.cb.tmax})　鋳型硬度規格: ${fmtSpec(spec.hard)}kg/cm² (狙い ${spec.hard.tmin}〜${spec.hard.tmax})　※黄=狙い外 / 赤=規格外`,st({font:4}));
   const r0=4;
   S.merge(0,r0,0,r0+2,"調査\n時刻",H);
   S.merge(1,r0,5,r0,"製造条件",H);
-  ["回収砂\n(kg)","新砂\n(sec)","シーコール\n(sec)","グリーン\nボンド(sec)","ベント\nナイト(sec)"].forEach((t,i)=>S.merge(1+i,r0+1,1+i,r0+2,t,H));
+  ["回収砂\n(kg)","新砂\n(%)","シーコール\n(%)","ミックス\nボンド(%)","ベント\nナイト(%)"].forEach((t,i)=>S.merge(1+i,r0+1,1+i,r0+2,t,H));
   S.merge(6,r0,7,r0+1,"環境条件",H); S.set(6,r0+2,"外気温\n(℃)",H); S.set(7,r0+2,"湿度\n(%)",H);
   S.merge(8,r0,14,r0,"造型機",H);
   S.merge(8,r0+1,8,r0+2,"水分\n(%)",H); S.merge(9,r0+1,9,r0+2,"CB\n(%)",H);
@@ -702,7 +735,7 @@ function buildNippoSheet(){
   state.rows.forEach((r,i)=>{ const y=r0+3+i;
     S.set(0,y,SLOTS[i],st({font:1,border:1,h:"center"}));
     if(r.off){ for(let c=1;c<17;c++) S.set(c,y,c===6?"/":"",st({border:1,h:"center",fill:"off"})); return; }
-    COND.forEach((k,j)=>S.set(1+j,y,r[k],B));
+    COND.forEach((k,j)=>S.set(1+j,y,effCond(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?1:0,fill:r[k]!==""?"sel":"none"})));
     ["temp","humid","moist","cb","h1n","h1s","h2n","h2s"].forEach((k,j)=>{
       const c=CHECKED.includes(k)?cls(k,r[k]):"";
       S.set(6+j,y,r[k],st({border:1,h:"center",fmt:fmtOf[k],fill:c==="ng"?"ng":c==="warn"?"warn":"none",font:c==="ng"?2:0})); });
@@ -836,6 +869,11 @@ const Sync=(function(){
     let j; try{ j=await call({action:"load",token:cfg.token,date:d,equip:e}); lastErr=""; lastOk=Date.now(); }catch(err){ lastErr=String(err.message||err); status(); return; }
     if(state.date!==d||state.equip!==e) return;
     let changed=false, selChanged=false;
+    if(j.prevCond && COND.some(k=>j.prevCond[k]!==""&&j.prevCond[k]!=null)){
+      const nc={}; COND.forEach(k=>nc[k]=(j.prevCond[k]!=null&&j.prevCond[k]!=="")?fmtCond(k,j.prevCond[k]):startCond(k));
+      if(COND.some(k=>num(nc[k])!==num(startCond(k)))){ state.cond0=nc; changed=true; selChanged=true;
+        state.rows.forEach((r,i)=>{ if(!r.off&&hasData(r)) queue("row",i); }); }
+    }
     (j.rows||[]).forEach(sr=>{ const i=sr.slot; if(i<0||i>23||pending(`row|${d}|${e}|${i}`)) return;
       if((sr.u||0)>(state.rows[i].u||0)){ state.rows[i]=Object.assign(blankRow(),sr.raw||{},{u:sr.u}); changed=true; if(i===sel) selChanged=true; } });
     // server-side cleared rows
