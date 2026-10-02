@@ -69,8 +69,8 @@ label.sup{color:#c62828;font-weight:bold}
 label.sup input{border:2px solid #e53935;background:#fff1f1;color:#b00020;font-weight:bold}
 label.sup input::placeholder{color:#e57373;font-weight:normal}
 input.cond-inh{color:#1d2330;background:#f3f5f8}
-input.cond-chg{background:#e3eeff;border:2px solid var(--pri);font-weight:bold}
-td.chg{background:#e3eeff;font-weight:bold}
+input.cond-chg{background:#fff1f1;border:2px solid #e53935;color:#d50000;font-weight:bold}
+td.chg{color:#d50000;font-weight:bold;background:#fff1f1}
 td.inh{color:#5d6778}
 input.ok{background:var(--ok)} input.warn{background:var(--warn)} input.ng{background:var(--ng);color:var(--ng-ink);font-weight:bold}
 .hint{font-size:12px;color:var(--sub);min-height:16px}
@@ -440,7 +440,7 @@ function condView(inp){
   if(document.activeElement!==inp) inp.value = chg ? r[k] : lastCond(sel,k);
   inp.className = chg ? "cond-chg" : "cond-inh";
   const h=document.querySelector(`[data-ch="${k}"]`);
-  if(h){ h.className="hint"; h.textContent = chg ? `この時刻で変更 (前: ${lastCond(sel,k)})` : "前回から継続"; }
+  if(h){ h.className="hint"; h.textContent = chg ? `この時刻で変更 (前: ${lastCond(sel,k)})` : "前回から継続"; if(chg) h.style.color="#d50000"; else h.style.color=""; }
 }
 function updateMarks(){
   const r=state.rows[sel];
@@ -735,7 +735,7 @@ function buildNippoSheet(){
   state.rows.forEach((r,i)=>{ const y=r0+3+i;
     S.set(0,y,SLOTS[i],st({font:1,border:1,h:"center"}));
     if(r.off){ for(let c=1;c<17;c++) S.set(c,y,c===6?"/":"",st({border:1,h:"center",fill:"off"})); return; }
-    COND.forEach((k,j)=>S.set(1+j,y,effCond(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?1:0,fill:r[k]!==""?"sel":"none"})));
+    COND.forEach((k,j)=>S.set(1+j,y,effCond(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?2:0,fill:"none"})));
     ["temp","humid","moist","cb","h1n","h1s","h2n","h2s"].forEach((k,j)=>{
       const c=CHECKED.includes(k)?cls(k,r[k]):"";
       S.set(6+j,y,r[k],st({border:1,h:"center",fmt:fmtOf[k],fill:c==="ng"?"ng":c==="warn"?"warn":"none",font:c==="ng"?2:0})); });
