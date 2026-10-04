@@ -65,6 +65,9 @@ input:focus,textarea:focus{outline:3px solid #9cc0f5;border-color:var(--pri)}
 .g-cond{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 .g-meas{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .g-hard{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+body.view #entryCard input,body.view #entryCard button.jb,body.view #events input,body.view #events textarea,body.view .card input:not([type=date]){pointer-events:none;background:#f3f5f8}
+body.view #btnClearRow,body.view #btnAddEv,body.view #btnSettings,body.view #btnInstall,body.view [data-del],body.view #jAuto,body.view #jOK,body.view #jNG,body.view .toggle{display:none!important}
+body.view #viewNote{display:block!important}
 label.sup{color:#c62828;font-weight:bold}
 label.sup input{border:2px solid #e53935;background:#fff1f1;color:#b00020;font-weight:bold}
 label.sup input::placeholder{color:#e57373;font-weight:normal}
@@ -130,7 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 </head>
 <body>
 <header class="top">
-  <h1>砂処理日報</h1>
+  <h1>砂処理日報 <span id="viewBadge" hidden style="font-size:13px;background:#fff;color:#16325c;border-radius:999px;padding:3px 10px;vertical-align:3px">閲覧用</span></h1>
   <label class="small" style="color:#cfd9ea">生産日 <input id="date" type="date" style="width:auto;min-height:40px;font-size:16px"></label>
   <label class="small" style="color:#cfd9ea">生産設備 <input id="equip" style="width:120px;min-height:40px;font-size:16px"></label>
   <button class="sync" id="syncStat" hidden>同期</button>
@@ -142,6 +145,9 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 </header>
 
 <main>
+  <div id="viewNote" style="display:none;background:#e3eeff;border:1px solid #9cc0f5;border-radius:10px;padding:10px 14px;font-size:15px">
+    <b>閲覧用の画面です。</b> 入力・修正はできません。「日報一覧」から過去の日報も見られます（45秒ごとに最新の内容に自動更新）。
+  </div>
   <section class="card">
     <h2>日報ヘッダー</h2>
     <div class="grid g-head">
@@ -321,6 +327,8 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 <script>
 (function(){
 "use strict";
+const VIEW = /[?&#]view\b/.test(location.search+location.hash);
+if(VIEW){ document.body.classList.add("view"); }
 const SLOTS = [];
 for(let i=0;i<24;i++){ SLOTS.push(((7+i)%24)+":00"); }
 const COND = ["kaishu","shinsa","seacoal","greenbond","bentonite"];
@@ -484,6 +492,7 @@ function renderEvents(){
      <button class="no-print" data-del="${i}" style="align-self:end">削除</button>
    </div>`).join("");
 }
+const _re=renderEvents; renderEvents=function(){ _re(); if(VIEW) document.querySelectorAll("#events input,#events textarea").forEach(el=>el.readOnly=true); };
 function renderWorkers(){ $("workerList").innerHTML = workers.map(w=>`<option value="${esc(w)}">`).join(""); }
 function renderAll(){ renderSpec(); renderHeader(); renderChips(); renderEntry(); renderTable(); renderEvents(); renderWorkers(); }
 function refreshLight(){ renderChips(); renderTable(); updateMarks(); }
@@ -848,7 +857,7 @@ const Sync=(function(){
     if(type==="header") return {k:`header|${d}|${e}`,op:{type,date:d,equip:e,u:state.hu||Date.now(),batch:asVal(state.batch),sandRemain:state.sandRemain,confirmBy:state.confirmBy}};
     const ev=state.events.find(x=>x.id===ref); return {k:`event|${ref}`,op:{type,date:d,equip:e,u:ev.u,id:ev.id,del:!!ev.del,time:ev.time,person:ev.person,content:ev.content,action:ev.action}};
   }
-  function queue(type,ref){ if(!on()) return; const it=build(type,ref); q=q.filter(x=>x.k!==it.k); q.push(it); persist(); status(); clearTimeout(timer); timer=setTimeout(flush,1200); }
+  function queue(type,ref){ if(!on()||VIEW) return; const it=build(type,ref); q=q.filter(x=>x.k!==it.k); q.push(it); persist(); status(); clearTimeout(timer); timer=setTimeout(flush,1200); }
   async function call(params,body){
     const url=cfg.syncUrl+(params?(cfg.syncUrl.includes("?")?"&":"?")+new URLSearchParams(params):"");
     const res=await fetch(url,body?{method:"POST",body:JSON.stringify(body),redirect:"follow"}:{redirect:"follow"});
@@ -948,6 +957,7 @@ const t=todayStr();
 load(t, (last&&last.equip)||defEquip);
 sel = nowSlot();
 renderAll();
+if(VIEW){ $("viewBadge").hidden=false; document.title="砂処理日報（閲覧用）"; document.querySelectorAll("#entryCard input,#events input,#events textarea,.card input:not([type=date])").forEach(el=>{ el.readOnly=true; if(el.type==="checkbox") el.disabled=true; }); }
 Sync.status(); Sync.flush().then(()=>Sync.pull());
 })();
 </script>
