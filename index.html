@@ -397,7 +397,7 @@ function rowStatus(r){
   if(CHECKED.some(k=>cls(k,r[k])==="warn")) return "warn";
   return "filled";
 }
-function fmtCond(k,v){ if(v==null||v==="") return ""; const n=Number(v); if(!isFinite(n)||String(v).trim()==="") return String(v); return k==="kaishu"?String(n):(k==="greenbond"?n.toFixed(2):n.toFixed(3)); }
+function fmtCond(k,v){ if(v==null||v==="") return ""; const n=Number(v); if(!isFinite(n)||String(v).trim()==="") return String(v); if(k==="kaishu") return String(n); const dec=Math.max(k==="greenbond"?2:3,(String(v).split(".")[1]||"").length); return n.toFixed(Math.min(dec,6)); }
 function startCond(k){ const c=state.cond0||{}; return (c[k]!=null&&c[k]!=="")?String(c[k]):COND_DEF[k]; }
 function lastCond(i,k){ for(let j=i-1;j>=0;j--){ const v=state.rows[j][k]; if(v!=="") return v; } return startCond(k); }
 function measured(r){ return MEAS.some(k=>r[k]!==""); }
@@ -657,7 +657,7 @@ function asVal(v){ if(v===""||v==null) return null; if(typeof v==="number") retu
 const XS={fonts:['<font><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><name val="Meiryo UI"/></font>','<font><b/><sz val="11"/><color rgb="FFB00020"/><name val="Meiryo UI"/></font>','<font><b/><sz val="16"/><name val="Meiryo UI"/></font>','<font><sz val="9"/><color rgb="FF5D6778"/><name val="Meiryo UI"/></font>'],
   fills:{none:0,gray:1,head:2,warn:3,ng:4,off:5,sel:6},
   fillXml:['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFEEF1F6"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3C4"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFFFDCDC"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE8EAEE"/></patternFill></fill>','<fill><patternFill patternType="solid"><fgColor rgb="FFE3EEFF"/></patternFill></fill>'],
-  fmts:{gen:0,d2:164,d1:165,d3:166}, xfs:[], map:{}};
+  fmts:{gen:0,d2:164,d1:165,d3:166,d23:167}, xfs:[], map:{}};
 function st(o){ o=Object.assign({font:0,fill:"none",border:0,fmt:"gen",h:"",wrap:false},o||{});
   const k=JSON.stringify(o); if(XS.map[k]!=null) return XS.map[k];
   const al = (o.h||o.wrap) ? `<alignment${o.h?` horizontal="${o.h}"`:""} vertical="center"${o.wrap?' wrapText="1"':""}/>` : '<alignment vertical="center"/>';
@@ -665,7 +665,7 @@ function st(o){ o=Object.assign({font:0,fill:"none",border:0,fmt:"gen",h:"",wrap
   return XS.map[k]=XS.xfs.length-1; }
 st({}); // index 0
 function stylesXml(){ return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
- '<numFmts count="3"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="0.000"/></numFmts>'+
+ '<numFmts count="4"><numFmt numFmtId="164" formatCode="0.00"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="0.000"/><numFmt numFmtId="167" formatCode="0.00#"/></numFmts>'+
  `<fonts count="${XS.fonts.length}">${XS.fonts.join("")}</fonts><fills count="${XS.fillXml.length}">${XS.fillXml.join("")}</fills>`+
  '<borders count="2"><border/><border><left style="thin"><color rgb="FF808A99"/></left><right style="thin"><color rgb="FF808A99"/></right><top style="thin"><color rgb="FF808A99"/></top><bottom style="thin"><color rgb="FF808A99"/></bottom></border></borders>'+
  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
@@ -747,7 +747,7 @@ function buildNippoSheet(){
   state.rows.forEach((r,i)=>{ const y=r0+3+i;
     S.set(0,y,SLOTS[i],st({font:1,border:1,h:"center"}));
     if(r.off){ for(let c=1;c<17;c++) S.set(c,y,c===6?"/":"",st({border:1,h:"center",fill:"off"})); return; }
-    COND.forEach((k,j)=>S.set(1+j,y,condDisp(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d2":"d3"),font:r[k]!==""?2:0,fill:"none"})));
+    COND.forEach((k,j)=>S.set(1+j,y,condDisp(i,k),st({border:1,h:"center",fmt:k==="kaishu"?"gen":(k==="greenbond"?"d23":"d3"),font:r[k]!==""?2:0,fill:"none"})));
     ["temp","humid","moist","cb","h1n","h1s","h2n","h2s"].forEach((k,j)=>{
       const c=CHECKED.includes(k)?cls(k,r[k]):"";
       S.set(6+j,y,r[k],st({border:1,h:"center",fmt:fmtOf[k],fill:c==="ng"?"ng":c==="warn"?"warn":"none",font:c==="ng"?2:0})); });
@@ -806,7 +806,7 @@ async function writeFile(name,blob){
 $("btnCsv").onclick=async()=>{
   if(!state.rows.some(r=>r.off||hasData(r))){ toast("入力データがありません"); return; }
   const unWorker = state.rows.findIndex(r=>!r.off && hasData(r) && !r.worker);
-  if(unWorker>=0 && !(await askConfirm(SLOTS[unWorker]+" の作業者が未記入です。このまま保存しますか?"))) return;
+  if(!VIEW && unWorker>=0 && !(await askConfirm(SLOTS[unWorker]+" の作業者が未記入です。このまま保存しますか?"))) return;
   const base="砂処理日報_"+state.equip.replace(/[\\/:*?"<>|]/g,"_")+"_"+state.date.replace(/-/g,"");
   const blob=buildXlsx();
   const dest=xlsxDest();
