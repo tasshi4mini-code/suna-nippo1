@@ -97,7 +97,8 @@ td.ok{} td.warn{background:var(--warn)} td.ng{background:var(--ng);color:var(--n
 td.jNG{color:var(--ng-ink);font-weight:bold}
 tr.off td{color:#9aa1ad}
 /* events */
-.ev{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;display:grid;gap:10px;grid-template-columns:140px 180px 1fr 1fr auto;align-items:start}
+.ev{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;display:grid;gap:10px;grid-template-columns:270px 160px 1fr 1fr auto;align-items:start}
+.evtr{display:flex;align-items:center;gap:4px}.evtr input{min-width:0;flex:1}.evtr span{font-weight:bold}
 /* dialog */
 dialog{border:none;border-radius:12px;padding:0;max-width:640px;width:calc(100% - 32px)}
 dialog::backdrop{background:rgba(0,0,0,.45)}
@@ -121,6 +122,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   .chips{grid-template-columns:repeat(6,1fr)}
   .ev{grid-template-columns:1fr 1fr}
   .ev .wide{grid-column:1/-1}
+  .ev .evt{grid-column:1/-1}
 }
 @media print{
   header.top,.no-print,#entryCard,#slotCard{display:none!important}
@@ -481,11 +483,14 @@ function renderTable(){
       `<td class="${j==="NG"?"jNG":""}">${j}</td><td>${esc(r.worker)}</td></tr>`;
   }).join("");
 }
+// 異常/変化点の時間：「7:00〜8:00」のように始まりと終わりを入れる（保存は「07:00〜08:00」の1つの文字）
+function evPart(t,i){ const p=String(t||"").split(/[〜~～\-－]/); const v=(p[i]||"").trim(); const m=/^(\d{1,2}):(\d{2})/.exec(v); return m?m[1].padStart(2,"0")+":"+m[2]:""; }
+function evJoin(a,b){ return a&&b?`${a}〜${b}`:(a?a:(b?`〜${b}`:"")); }
 function renderEvents(){
   if(!liveEvents().length){ $("events").innerHTML='<div class="small" style="margin-bottom:10px">記録なし</div>'; return; }
   $("events").innerHTML = state.events.map((e,i)=>e.del?"":`
    <div class="ev" data-e="${i}">
-     <label class="f">発生時刻<input type="time" data-ek="time" value="${esc(e.time)}"></label>
+     <div class="f evt"><span class="small">時間（始まり〜終わり）</span><div class="evtr"><input type="time" data-ek="tS" value="${esc(evPart(e.time,0))}"><span>〜</span><input type="time" data-ek="tE" value="${esc(evPart(e.time,1))}"></div></div>
      <label class="f">担当<input data-ek="person" list="workerList" value="${esc(e.person)}"></label>
      <label class="f wide">異常/変化点内容<textarea data-ek="content">${esc(e.content)}</textarea></label>
      <label class="f wide">処置内容<textarea data-ek="action">${esc(e.action)}</textarea></label>
@@ -534,7 +539,7 @@ function switchDay(){
 $("date").addEventListener("change",switchDay);
 $("equip").addEventListener("change",switchDay);
 $("btnAddEv").onclick=()=>{ const h=new Date(); const ev={id:uid(),u:Date.now(),time:String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0"),person:state.rows[sel].worker||"",content:"",action:""}; state.events.push(ev); save(); Sync.queue("event",ev.id); renderEvents(); };
-$("events").addEventListener("input",e=>{ const box=e.target.closest(".ev"); const k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; ev[k]=e.target.value; ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
+$("events").addEventListener("input",e=>{ const box=e.target.closest(".ev"); const k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; if(k==="tS"||k==="tE") ev.time=evJoin(box.querySelector('[data-ek="tS"]').value,box.querySelector('[data-ek="tE"]').value); else ev[k]=e.target.value; ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
 $("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if(d!=null && await askConfirm("この記録を削除しますか?")){ const ev=state.events[+d]; ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } });
 
 // ---- settings ----
