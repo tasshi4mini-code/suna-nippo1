@@ -581,7 +581,10 @@ $("whyRs").addEventListener("click",e=>{ const b=e.target.closest("[data-r]"); i
 $("whyOk").onclick=()=>{ const ev=whyEv; if(!ev) return; const v=$("whyTxt").value.trim(); if(!v){ toast("変更理由を入れてください（あとで入れるときは「あとで入れる」）"); return; }
   ev.why=v; ev.content=ev.ck?condEvText(ev):(/変更理由：/.test(ev.content||"")?String(ev.content).replace(/変更理由：.*$/m,"変更理由："+v):(ev.content||"")+"\n変更理由："+v); ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); $("dlgWhy").close(); toast("変更理由を記録しました"); };
 $("whyLater").onclick=()=>{ $("dlgWhy").close(); toast("⚠ 変更理由は、下の「異常/変化点」の欄の「理由を入れる」から入れてください"); };
-document.querySelectorAll("#entryCard input[data-k]").forEach(inp=>{ if(COND.includes(inp.dataset.k)) inp.addEventListener("change",()=>condChanged(sel,inp.dataset.k)); });
+document.querySelectorAll("#entryCard input[data-k]").forEach(inp=>{ if(COND.includes(inp.dataset.k)) inp.addEventListener("change",async()=>{ const k=inp.dataset.k, i=sel;
+    // v24：数字を消して空欄にしたときは「止める（0）」のつもりかを聞く（空欄は「前の値を引き継ぐ」なので、止めたことが残らなかった）
+    if(!VIEW&&inp.value.trim()===""&&num(lastCond(i,k))){ if(await askConfirm(`${COND_LABEL[k]}を「0」（止める）にしますか？\n\n「キャンセル」なら、前の値 ${lastCond(i,k)}${COND_UNIT[k]||""} のまま引き継ぎます。`)){ state.rows[i][k]="0"; touchRow(i,true); inp.value="0"; condView(inp); refreshLight(); } }
+    condChanged(i,k); }); });
 // 機械故障のボタン
 $("btnKosho").onclick=()=>{ if(VIEW) return; const ev={id:uid(),u:Date.now(),time:nowHM(),person:state.rows[sel].worker||"",content:"【機械故障】",action:"",kind:"kosho"}; state.events.push(ev); save(); Sync.queue("event",ev.id); renderEvents();
   const box=document.querySelector(`#events .ev[data-e="${state.events.indexOf(ev)}"]`); if(box){ box.scrollIntoView({block:"center"}); const ta=box.querySelector('[data-ek="content"]'); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); } } };
