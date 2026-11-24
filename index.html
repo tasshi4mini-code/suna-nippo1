@@ -98,6 +98,16 @@ td.jNG{color:var(--ng-ink);font-weight:bold}
 tr.off td{color:#9aa1ad}
 /* events */
 .ev{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;display:grid;gap:10px;grid-template-columns:270px 160px 1fr 1fr auto;align-items:start}
+.ev.cond{border:2px solid #1565c0;background:#f3f8ff}.ev.kosho{border:2px solid #c62828;background:#fff5f5}.ev.need{box-shadow:0 0 0 3px rgba(213,0,0,.35)}
+.evtag{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:bold;font-size:14px}
+.evtag .tg{color:#fff;border-radius:6px;padding:2px 10px}.ev.cond .tg{background:#1565c0}.ev.kosho .tg{background:#c62828}
+.evtag .needm{color:#d50000}.evtag button{min-height:34px;font-size:13px}
+.evbtns{display:flex;gap:10px;flex-wrap:wrap}
+.evbtns #btnKosho{background:#c62828;color:#fff;border-color:#c62828;font-weight:bold}
+#dlgWhy .rs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+#dlgWhy .rs button{min-height:42px}
+#dlgWhy textarea{width:100%;min-height:80px;font-size:17px;box-sizing:border-box}
+#dlgWhy .chg{font-size:18px;font-weight:bold;color:#1565c0;margin:6px 0}
 .evtr{display:flex;align-items:center;gap:4px}.evtr input{min-width:0;flex:1}.evtr span{font-weight:bold}
 /* dialog */
 dialog{border:none;border-radius:12px;padding:0;max-width:640px;width:calc(100% - 32px)}
@@ -252,7 +262,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   <section class="card">
     <h2>異常/変化点履歴</h2>
     <div id="events"></div>
-    <button class="no-print" id="btnAddEv">＋ 異常/変化点を追加</button>
+    <div class="evbtns no-print"><button id="btnAddEv">＋ 異常/変化点を追加</button><button id="btnKosho">⚙ 機械故障 <span class="id">Kerusakan mesin</span></button></div>
   </section>
 
   <p class="small no-print" style="text-align:center">入力内容はこのパソコン/タブレットのブラウザに自動保存されます。最終的な記録は「Excel保存」で保存してください。</p>
@@ -304,6 +314,15 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   </div>
 </div></dialog>
 
+<dialog id="dlgWhy"><div class="dlg" style="max-width:520px">
+  <h3 style="margin:0">製造条件を変更しました：変更理由を入れてください</h3>
+  <div class="small">Alasan perubahan kondisi produksi</div>
+  <div class="chg" id="whyChg"></div>
+  <div class="rs" id="whyRs"></div>
+  <textarea id="whyTxt" placeholder="変更した理由（例：水分が高めのため回収砂を増やした）"></textarea>
+  <div class="small" style="margin-top:6px">「異常/変化点」の欄に自動で記録されます。あとで直すこともできます。</div>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button id="whyLater">あとで入れる</button><button class="pri" id="whyOk">保存</button></div>
+</div></dialog>
 <dialog id="dlgConfirm"><div class="dlg">
   <p id="cfMsg" style="font-size:17px;margin:4px 0 18px;white-space:pre-line"></p>
   <div style="display:flex;justify-content:flex-end;gap:8px">
@@ -492,7 +511,8 @@ function evJoin(a,b){ return a&&b?`${a}〜${b}`:(a?a:(b?`〜${b}`:"")); }
 function renderEvents(){
   if(!liveEvents().length){ $("events").innerHTML='<div class="small" style="margin-bottom:10px">記録なし</div>'; return; }
   $("events").innerHTML = state.events.map((e,i)=>e.del?"":`
-   <div class="ev" data-e="${i}">
+   <div class="ev ${evKind(e)} ${evKind(e)==="cond"&&!evWhy(e)?"need":""}" data-e="${i}">
+     ${evKind(e)==="cond"?`<div class="evtag"><span class="tg">製造条件の変更</span>${evWhy(e)?"":`<span class="needm">⚠ 変更理由が入っていません</span><button data-why="${i}">理由を入れる</button>`}</div>`:evKind(e)==="kosho"?`<div class="evtag"><span class="tg">⚙ 機械故障</span><span class="small">どの機械が・どうなったか、処置を入れてください</span></div>`:""}
      <div class="f evt"><span class="small">時間（始まり〜終わり）</span><div class="evtr"><input type="time" data-ek="tS" value="${esc(evPart(e.time,0))}"><span>〜</span><input type="time" data-ek="tE" value="${esc(evPart(e.time,1))}"></div></div>
      <label class="f">担当<input data-ek="person" list="workerList" value="${esc(e.person)}"></label>
      <label class="f wide">異常/変化点内容<textarea data-ek="content">${esc(e.content)}</textarea></label>
@@ -541,9 +561,33 @@ function switchDay(){
 }
 $("date").addEventListener("change",switchDay);
 $("equip").addEventListener("change",switchDay);
+// ---- 製造条件を変えたら、異常/変化点に自動で記録して、変更理由を入れてもらう ----
+const COND_UNIT={kaishu:" kg",shinsa:" %",seacoal:" %",greenbond:" %",bentonite:" %"};
+const WHY_R=["水分の調整","CBの調整","鋳型硬度の調整","砂の状態が悪い","上司の指示","テスト・試し"];
+// 種類と理由は内容の文から読む（ほかの端末・スプレッドシートから読んだ記録でも同じに表示するため）
+function evKind(e){ const c=String(e.content||""); return /^製造条件の変更/.test(c)?"cond":/^【機械故障】/.test(c)?"kosho":(e.kind||""); }
+function evWhy(e){ const m=/変更理由：(.*)$/m.exec(String(e.content||"")); return m&&m[1].trim()&&m[1].trim()!=="（未入力）"?m[1].trim():""; }
+function condEvText(ev){ return `製造条件の変更（${ev.slot}の分）：${COND_LABEL[ev.ck]} ${ev.from} → ${ev.to}${COND_UNIT[ev.ck]||""}\n変更理由：${ev.why||"（未入力）"}`; }
+let whyEv=null;
+function condChanged(i,k){ if(VIEW) return; const r=state.rows[i], key="cond|"+i+"|"+k; let ev=state.events.find(x=>x.auto===key&&!x.del);
+  if(r[k]===""){ if(ev){ ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } return; }   // 元の値に戻したときは記録を消す
+  const from=lastCond(i,k), to=r[k]; if(ev&&ev.to===to) return;
+  if(!ev){ ev={id:uid(),u:Date.now(),time:nowHM(),person:r.worker||"",content:"",action:"",kind:"cond",auto:key,ck:k,slot:SLOTS[i]}; state.events.push(ev); }
+  ev.from=from; ev.to=to; ev.content=condEvText(ev); ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); openWhy(ev); }
+function nowHM(){ const h=new Date(); return String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0"); }
+function openWhy(ev){ whyEv=ev; $("whyChg").textContent=ev.ck?`${COND_LABEL[ev.ck]}：${ev.from} → ${ev.to}${COND_UNIT[ev.ck]||""}（${ev.slot}の分）`:String(ev.content||"").split("\n")[0];
+  $("whyTxt").value=evWhy(ev); $("whyRs").innerHTML=WHY_R.map(t=>`<button data-r="${t}">${t}</button>`).join(""); if(!$("dlgWhy").open) $("dlgWhy").showModal(); setTimeout(()=>$("whyTxt").focus(),50); }
+$("whyRs").addEventListener("click",e=>{ const b=e.target.closest("[data-r]"); if(!b) return; e.preventDefault(); const t=$("whyTxt"); t.value=t.value?(t.value.includes(b.dataset.r)?t.value:t.value+"・"+b.dataset.r):b.dataset.r; t.focus(); });
+$("whyOk").onclick=()=>{ const ev=whyEv; if(!ev) return; const v=$("whyTxt").value.trim(); if(!v){ toast("変更理由を入れてください（あとで入れるときは「あとで入れる」）"); return; }
+  ev.why=v; ev.content=ev.ck?condEvText(ev):(/変更理由：/.test(ev.content||"")?String(ev.content).replace(/変更理由：.*$/m,"変更理由："+v):(ev.content||"")+"\n変更理由："+v); ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); $("dlgWhy").close(); toast("変更理由を記録しました"); };
+$("whyLater").onclick=()=>{ $("dlgWhy").close(); toast("⚠ 変更理由は、下の「異常/変化点」の欄の「理由を入れる」から入れてください"); };
+document.querySelectorAll("#entryCard input[data-k]").forEach(inp=>{ if(COND.includes(inp.dataset.k)) inp.addEventListener("change",()=>condChanged(sel,inp.dataset.k)); });
+// 機械故障のボタン
+$("btnKosho").onclick=()=>{ if(VIEW) return; const ev={id:uid(),u:Date.now(),time:nowHM(),person:state.rows[sel].worker||"",content:"【機械故障】",action:"",kind:"kosho"}; state.events.push(ev); save(); Sync.queue("event",ev.id); renderEvents();
+  const box=document.querySelector(`#events .ev[data-e="${state.events.indexOf(ev)}"]`); if(box){ box.scrollIntoView({block:"center"}); const ta=box.querySelector('[data-ek="content"]'); if(ta){ ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length); } } };
 $("btnAddEv").onclick=()=>{ const h=new Date(); const ev={id:uid(),u:Date.now(),time:String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0"),person:state.rows[sel].worker||"",content:"",action:""}; state.events.push(ev); save(); Sync.queue("event",ev.id); renderEvents(); };
-$("events").addEventListener("input",e=>{ const box=e.target.closest(".ev"); const k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; if(k==="tS"||k==="tE") ev.time=evJoin(box.querySelector('[data-ek="tS"]').value,box.querySelector('[data-ek="tE"]').value); else ev[k]=e.target.value; ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
-$("events").addEventListener("click",async e=>{ const d=e.target.dataset.del; if(d!=null && await askConfirm("この記録を削除しますか?")){ const ev=state.events[+d]; ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } });
+$("events").addEventListener("input",e=>{ const box=e.target.closest(".ev"); const k=e.target.dataset.ek; if(box&&k){ const ev=state.events[+box.dataset.e]; if(k==="tS"||k==="tE") ev.time=evJoin(box.querySelector('[data-ek="tS"]').value,box.querySelector('[data-ek="tE"]').value); else ev[k]=e.target.value; if(k==="content"&&ev.kind==="cond"){ const m=/変更理由：(.*)$/m.exec(ev.content||""); ev.why=m&&m[1].trim()!=="（未入力）"?m[1].trim():""; } ev.u=Date.now(); save(); Sync.queue("event",ev.id); } });
+$("events").addEventListener("click",async e=>{ const w=e.target.closest("[data-why]"); if(w&&!VIEW){ openWhy(state.events[+w.dataset.why]); return; } const d=e.target.dataset.del; if(d!=null && await askConfirm("この記録を削除しますか?")){ const ev=state.events[+d]; ev.del=true; ev.u=Date.now(); save(); Sync.queue("event",ev.id); renderEvents(); } });
 
 // ---- settings ----
 function renderSpecEdit(){
